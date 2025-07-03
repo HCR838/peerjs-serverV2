@@ -95,40 +95,56 @@
       if (peer) peer.destroy();
       // peer = new Peer(); Public PeerJS Server
       //Own PeerJS Server (Testing)
-      peer = new Peer({
-        // host: 'localhost',
-        host: 'p2pftv1.onrender.com',
-        port: 443,
-        path: '/peerjs',
-        secure: true
-      });
+      // peer = new Peer({
+      //   // host: 'localhost',
+      //   host: 'p2pftv1.onrender.com',
+      //   port: 443,
+      //   path: '/peerjs',
+      //   secure: true
+      // });
 
-      peer.on('open', id => {
-        myIdInput.value = id;
-        statusText.textContent = `Status: Your ID is ${id}`;
-
-        qrContainer.innerHTML = '';
-        new QRCode(qrContainer, {
-          text: id,
-          width: 180,
-          height: 180,
-          colorDark: "#0f0",
-          colorLight: "#000",
-          correctLevel: QRCode.CorrectLevel.H
-        });
-      });
-
-      peer.on('connection', incomingConn => {
-        conn = incomingConn;
-        statusText.textContent = `Status: Peer connected`;
-        setupReceiver();
-      });
-
-      peer.on('error', err => {
-        console.error(err);
-        statusText.textContent = `Status: Error - ${err.message}`;
-      });
+      fetch('https://website-name.onrender.com/ice')
+  .then(res => res.json())
+  .then(config => {
+    peer = new Peer({
+      host: 'website-name.onrender.com',
+      port: 443,
+      path: '/peerjs',
+      secure: true,
+      config // now includes STUN + TURN servers
     });
+
+    setupPeerEvents(); // 👇 separate logic for clean code
+  });
+
+  function setupPeerEvents() {
+  peer.on('open', id => {
+    myIdInput.value = id;
+    statusText.textContent = `Status: Your ID is ${id}`;
+    qrContainer.innerHTML = '';
+    new QRCode(qrContainer, {
+      text: id,
+      width: 180,
+      height: 180,
+      colorDark: "#0f0",
+      colorLight: "#000",
+      correctLevel: QRCode.CorrectLevel.H
+    });
+  });
+
+  peer.on('connection', incomingConn => {
+    conn = incomingConn;
+    statusText.textContent = `Status: Peer connected`;
+    setupReceiver();
+  });
+
+  peer.on('error', err => {
+    console.error(err);
+    statusText.textContent = `Status: Error - ${err.message}`;
+  });
+}
+
+
 
     connectBtn.addEventListener('click', () => {
       if (!peer) {
