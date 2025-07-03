@@ -125,30 +125,85 @@
 // console.log("PeerJS server is running...");
 
 
+// const express = require('express');
+// const { ExpressPeerServer } = require('peer');
+// const cors = require('cors');
+// const fetch = require('node-fetch'); // Make sure node-fetch is installed
+
+// const app = express();
+
+// // ✅ Enable CORS for all origins (you can restrict it to your GitHub Pages domain)
+// app.use(cors());
+
+// const server = app.listen(process.env.PORT || 3000, () => {
+//   console.log('✅ Server started on port 3000');
+// });
+
+// // ✅ PeerJS Server Configuration
+// const peerServer = ExpressPeerServer(server, {
+//   debug: true,
+//   path: '/' // Internal PeerJS path
+// });
+
+// // ✅ Mount the PeerJS server at /peerjs
+// app.use('/peerjs', peerServer);
+
+// // ✅ Xirsys ICE server fetch endpoint
+// app.get('/ice', async (req, res) => {
+//   try {
+//     const response = await fetch('https://global.xirsys.net/_turn/myP2PChannel', {
+//       method: 'PUT',
+//       headers: {
+//         'Authorization': 'Basic ' + Buffer.from('Yemoxem:6939cb34-57ff-11f0-ab2c-0242ac150003').toString('base64'),
+//         'Content-Type': 'application/json'
+//       }
+//     });
+
+//     const data = await response.json();
+
+//     if (data && data.v && data.v.iceServers) {
+//       res.json(data.v.iceServers); // Only send iceServers array
+//     } else {
+//       res.status(500).json({ error: 'Invalid ICE response from Xirsys' });
+//     }
+//   } catch (err) {
+//     console.error('❌ Failed to fetch ICE config', err);
+//     res.status(500).json({ error: 'Could not get ICE servers' });
+//   }
+// });
+
+// // ✅ Root test route
+// app.get('/', (req, res) => {
+//   res.send('✅ PeerJS server is up and running!');
+// });
+
+// console.log('🚀 PeerJS server is running...');
+
+
 const express = require('express');
 const { ExpressPeerServer } = require('peer');
 const cors = require('cors');
-const fetch = require('node-fetch'); // Make sure node-fetch is installed
+const fetch = require('node-fetch');
 
 const app = express();
 
-// ✅ Enable CORS for all origins (you can restrict it to your GitHub Pages domain)
+// ✅ Allow all origins or restrict to GitHub Pages if needed
 app.use(cors());
 
 const server = app.listen(process.env.PORT || 3000, () => {
   console.log('✅ Server started on port 3000');
 });
 
-// ✅ PeerJS Server Configuration
+// ✅ PeerJS server setup
 const peerServer = ExpressPeerServer(server, {
   debug: true,
-  path: '/' // Internal PeerJS path
+  path: '/'
 });
 
-// ✅ Mount the PeerJS server at /peerjs
+// ✅ Mount PeerJS server on /peerjs
 app.use('/peerjs', peerServer);
 
-// ✅ Xirsys ICE server fetch endpoint
+// ✅ ICE config endpoint from Xirsys
 app.get('/ice', async (req, res) => {
   try {
     const response = await fetch('https://global.xirsys.net/_turn/myP2PChannel', {
@@ -160,22 +215,19 @@ app.get('/ice', async (req, res) => {
     });
 
     const data = await response.json();
-
     if (data && data.v && data.v.iceServers) {
-      res.json(data.v.iceServers); // Only send iceServers array
+      res.json(data.v.iceServers);
     } else {
-      res.status(500).json({ error: 'Invalid ICE response from Xirsys' });
+      console.error('Invalid ICE config response', data);
+      res.status(500).json({ error: 'Invalid ICE server response' });
     }
   } catch (err) {
-    console.error('❌ Failed to fetch ICE config', err);
-    res.status(500).json({ error: 'Could not get ICE servers' });
+    console.error('❌ Error fetching ICE config:', err);
+    res.status(500).json({ error: 'Could not fetch ICE servers' });
   }
 });
 
-// ✅ Root test route
+// Test route
 app.get('/', (req, res) => {
   res.send('✅ PeerJS server is up and running!');
 });
-
-console.log('🚀 PeerJS server is running...');
-

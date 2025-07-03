@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html>
 <head>
   <title>Retro P2P File Transfer</title>
@@ -56,7 +56,7 @@
 
   <div>
     <input type="file" id="fileInput" />
-    <button id="sendBtn">Send File</button>
+    <button id="sendBtn" disabled>Send File</button>
   </div>
 
   <br>
@@ -155,6 +155,9 @@
       conn = peer.connect(targetId);
       conn.on('open', () => {
         statusText.textContent = `Status: Connected to ${targetId}`;
+
+        //Enable send button only when ready
+        sendBtn.disabled = false;
       });
 
       conn.on('error', err => {
@@ -239,6 +242,251 @@
       readSlice(0);
     });
   </script>
+
+</body>
+</html> -->
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Retro P2P File Transfer</title>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <style>
+    body {
+      background-color: #000;
+      color: #0f0;
+      font-family: monospace;
+      padding: 20px;
+    }
+    input, button, progress {
+      background-color: #000;
+      color: #0f0;
+      border: 1px solid #0f0;
+      padding: 5px;
+      margin: 5px 0;
+    }
+    button:hover {
+      background-color: #0f0;
+      color: #000;
+      cursor: pointer;
+    }
+    #qrcode {
+      margin-top: 10px;
+      border: 1px dashed #0f0;
+      padding: 10px;
+      width: fit-content;
+    }
+  </style>
+</head>
+<body>
+
+<h2>🕹️ Retro P2P File Transfer</h2>
+
+<div>
+  <label>Your Peer ID:</label><br>
+  <input type="text" id="myId" readonly />
+  <button id="generateIdBtn">Generate ID</button>
+</div>
+
+<div id="qrcode"></div>
+
+<br>
+
+<div>
+  <label>Connect to Peer ID:</label><br>
+  <input type="text" id="peerId" />
+  <button id="connectBtn">Connect</button>
+</div>
+
+<br>
+
+<div>
+  <input type="file" id="fileInput" />
+  <button id="sendBtn" disabled>Send File</button>
+</div>
+
+<br>
+
+<div>
+  <label>Progress:</label><br>
+  <progress id="progressBar" value="0" max="100" style="width:300px;"></progress>
+</div>
+
+<br>
+
+<div>
+  <p id="status">Status: Not connected</p>
+</div>
+
+<script>
+  let peer;
+  let conn;
+
+  const myIdInput = document.getElementById('myId');
+  const peerIdInput = document.getElementById('peerId');
+  const generateIdBtn = document.getElementById('generateIdBtn');
+  const connectBtn = document.getElementById('connectBtn');
+  const fileInput = document.getElementById('fileInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const progressBar = document.getElementById('progressBar');
+  const statusText = document.getElementById('status');
+  const qrContainer = document.getElementById('qrcode');
+
+  const CHUNK_SIZE = 64 * 1024;
+  let incomingFileInfo = null;
+  let incomingFileData = [];
+  let receivedSize = 0;
+
+  generateIdBtn.addEventListener('click', () => {
+    if (peer) peer.destroy();
+
+    fetch('https://p2pftv1.onrender.com/ice')
+      .then(res => res.json())
+      .then(res => {
+        const config = { iceServers: res };
+        peer = new Peer({
+          host: 'p2pftv1.onrender.com',
+          port: 443,
+          path: '/peerjs',
+          secure: true,
+          config
+        });
+
+        setupPeerEvents();
+      })
+      .catch(err => {
+        console.error("❌ Failed to load ICE config:", err);
+        statusText.textContent = "❌ Failed to load ICE config.";
+      });
+  });
+
+  function setupPeerEvents() {
+    peer.on('open', id => {
+      myIdInput.value = id;
+      statusText.textContent = `Status: Your ID is ${id}`;
+      qrContainer.innerHTML = '';
+      new QRCode(qrContainer, {
+        text: id,
+        width: 180,
+        height: 180,
+        colorDark: "#0f0",
+        colorLight: "#000",
+        correctLevel: QRCode.CorrectLevel.H
+      });
+    });
+
+    peer.on('connection', incomingConn => {
+      conn = incomingConn;
+      statusText.textContent = `Status: Peer connected`;
+      sendBtn.disabled = false;
+      setupReceiver();
+    });
+
+    peer.on('error', err => {
+      console.error(err);
+      statusText.textContent = `❌ PeerJS Error: ${err.message}`;
+    });
+  }
+
+  connectBtn.addEventListener('click', () => {
+    if (!peer) {
+      alert('Generate your ID first.');
+      return;
+    }
+
+    const targetId = peerIdInput.value.trim();
+    if (!targetId) {
+      alert('Enter a valid Peer ID to connect.');
+      return;
+    }
+
+    conn = peer.connect(targetId);
+    conn.on('open', () => {
+      statusText.textContent = `Status: Connected to ${targetId}`;
+      sendBtn.disabled = false;
+    });
+
+    conn.on('error', err => {
+      console.error(err);
+      statusText.textContent = `❌ Connection failed`;
+    });
+
+    setupReceiver();
+  });
+
+  function setupReceiver() {
+    if (!conn) return;
+
+    conn.on('data', data => {
+      if (data.type === 'file-meta') {
+        incomingFileInfo = data;
+        incomingFileData = [];
+        receivedSize = 0;
+        progressBar.value = 0;
+        statusText.textContent = `Receiving "${data.name}" (${Math.round(data.size / 1024)} KB)...`;
+      } else if (data.type === 'file-chunk') {
+        incomingFileData.push(new Uint8Array(data.chunk));
+        receivedSize += data.chunk.byteLength;
+
+        const percent = Math.floor((receivedSize / incomingFileInfo.size) * 100);
+        progressBar.value = percent;
+
+        if (receivedSize >= incomingFileInfo.size) {
+          const blob = new Blob(incomingFileData);
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = incomingFileInfo.name;
+          link.click();
+          statusText.textContent = `✅ Received: ${incomingFileInfo.name}`;
+        }
+      }
+    });
+  }
+
+  sendBtn.addEventListener('click', () => {
+    if (!conn || !conn.open) {
+      alert("❌ No peer connected.");
+      return;
+    }
+
+    const file = fileInput.files[0];
+    if (!file) {
+      alert("Please select a file.");
+      return;
+    }
+
+    conn.send({ type: 'file-meta', name: file.name, size: file.size });
+
+    const reader = new FileReader();
+    let offset = 0;
+
+    reader.onload = function () {
+      const chunk = reader.result;
+      conn.send({ type: 'file-chunk', chunk });
+      offset += chunk.byteLength;
+
+      const percent = Math.floor((offset / file.size) * 100);
+      progressBar.value = percent;
+
+      if (offset < file.size) {
+        readSlice(offset);
+      } else {
+        statusText.textContent = `✅ Sent: ${file.name}`;
+      }
+    };
+
+    function readSlice(o) {
+      const slice = file.slice(o, o + CHUNK_SIZE);
+      reader.readAsArrayBuffer(slice);
+    }
+
+    readSlice(0);
+  });
+</script>
 
 </body>
 </html>
