@@ -95,10 +95,12 @@
       if (peer) peer.destroy();
       // peer = new Peer(); Public PeerJS Server
       //Own PeerJS Server (Testing)
-      peer = new Peer(undefined, {
-        host: 'localhost',
-        port: 9000,
-        path: '/'
+      peer = new Peer({
+        // host: 'localhost',
+        host: 'p2pftv1.onrender.com',
+        port: 443,
+        path: '/peerjs'
+        secure: true
       });
 
       peer.on('open', id => {
