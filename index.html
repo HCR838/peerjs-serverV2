@@ -599,12 +599,13 @@
       .then(res => {
         const config = { iceServers: res };
         peer = new Peer({
-          host: 'website-name.onrender.com',
+          host: 'p2pftv1.onrender.com',
           port: 443,
           path: '/peerjs',
           secure: true,
           config
         });
+        
 
         setupPeerEvents();
       })
