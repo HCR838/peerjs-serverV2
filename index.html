@@ -1,7 +1,7 @@
-<!-- <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
-  <title>Retro P2P File Transfer</title>
+  <title>Multi Support Retro P2P File Transfer</title>
   <meta charset="UTF-8">
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
@@ -34,203 +34,209 @@
 </head>
 <body>
 
-  <h2>🕹️ Retro P2P File Transfer</h2>
+<h2>🕹️ Retro P2P File Transfer</h2>
 
-  <div>
-    <label>Your Peer ID:</label><br>
-    <input type="text" id="myId" readonly />
-    <button id="generateIdBtn">Generate ID</button>
-  </div>
+<div>
+  <label>Your Peer ID:</label><br>
+  <input type="text" id="myId" readonly />
+  <button id="generateIdBtn">Generate ID</button>
+</div>
 
-  <div id="qrcode"></div>
+<div id="qrcode"></div>
 
-  <br>
+<br>
 
-  <div>
-    <label>Connect to Peer ID:</label><br>
-    <input type="text" id="peerId" />
-    <button id="connectBtn">Connect</button>
-  </div>
+<div>
+  <label>Connect to Peer ID:</label><br>
+  <input type="text" id="peerId" />
+  <button id="connectBtn">Connect</button>
+</div>
 
-  <br>
+<br>
 
-  <div>
-    <input type="file" id="fileInput" />
-    <button id="sendBtn" disabled>Send File</button>
-  </div>
+<div>
+  <input type="file" id="fileInput" multiple />
+  <button id="sendBtn" disabled>Send File(s)</button>
+</div>
 
-  <br>
+<br>
 
-  <div>
-    <label>Progress:</label><br>
-    <progress id="progressBar" value="0" max="100" style="width:300px;"></progress>
-  </div>
+<div>
+  <label>Progress:</label><br>
+  <progress id="progressBar" value="0" max="100" style="width:300px;"></progress>
+</div>
 
-  <br>
+<br>
 
-  <div>
-    <p id="status">Status: Not connected</p>
-  </div>
+<div>
+  <p id="status">Status: Not connected</p>
+</div>
 
-  <script>
-    let peer;
-    let conn;
+<script>
+  let peer;
+  let conn;
 
-    const myIdInput = document.getElementById('myId');
-    const peerIdInput = document.getElementById('peerId');
-    const generateIdBtn = document.getElementById('generateIdBtn');
-    const connectBtn = document.getElementById('connectBtn');
-    const fileInput = document.getElementById('fileInput');
-    const sendBtn = document.getElementById('sendBtn');
-    const progressBar = document.getElementById('progressBar');
-    const statusText = document.getElementById('status');
-    const qrContainer = document.getElementById('qrcode');
+  const myIdInput = document.getElementById('myId');
+  const peerIdInput = document.getElementById('peerId');
+  const generateIdBtn = document.getElementById('generateIdBtn');
+  const connectBtn = document.getElementById('connectBtn');
+  const fileInput = document.getElementById('fileInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const progressBar = document.getElementById('progressBar');
+  const statusText = document.getElementById('status');
+  const qrContainer = document.getElementById('qrcode');
 
-    const CHUNK_SIZE = 64 * 1024; // 64KB
-    let incomingFileInfo = null;
-    let incomingFileData = [];
-    let receivedSize = 0;
+  const CHUNK_SIZE = 64 * 1024;
+  let incomingFileInfo = null;
+  let incomingFileData = [];
+  let receivedSize = 0;
 
-    generateIdBtn.addEventListener('click', () => {
-      if (peer) peer.destroy();
+  generateIdBtn.addEventListener('click', () => {
+    if (peer) peer.destroy();
 
-      fetch('https://p2pftv1.onrender.com/ice') // ✅ Replace with your actual Render server
-        .then(res => res.json())
-        .then(config => {
-          peer = new Peer({
-            host: 'p2pftv1.onrender.com',
-            port: 443,
-            path: '/peerjs',
-            secure: true,
-            config
-          });
-
-          setupPeerEvents();
-        })
-        .catch(err => {
-          console.error("Failed to load ICE config:", err);
-          statusText.textContent = "Failed to load ICE config.";
+    fetch('https://p2pftv1.onrender.com/ice')
+      .then(res => res.json())
+      .then(res => {
+        const config = { iceServers: res };
+        peer = new Peer({
+          host: 'p2pftv1.onrender.com',
+          port: 443,
+          path: '/peerjs',
+          secure: true,
+          config
         });
+        setupPeerEvents();
+      })
+      .catch(err => {
+        console.error("❌ Failed to load ICE config:", err);
+        statusText.textContent = "❌ Failed to load ICE config.";
+      });
+  });
+
+  function setupPeerEvents() {
+    peer.on('open', id => {
+      myIdInput.value = id;
+      statusText.textContent = `Status: Your ID is ${id}`;
+      qrContainer.innerHTML = '';
+      new QRCode(qrContainer, {
+        text: id,
+        width: 180,
+        height: 180,
+        colorDark: "#0f0",
+        colorLight: "#000",
+        correctLevel: QRCode.CorrectLevel.H
+      });
     });
 
-    function setupPeerEvents() {
-      peer.on('open', id => {
-        myIdInput.value = id;
-        statusText.textContent = `Status: Your ID is ${id}`;
-        qrContainer.innerHTML = '';
-        new QRCode(qrContainer, {
-          text: id,
-          width: 180,
-          height: 180,
-          colorDark: "#0f0",
-          colorLight: "#000",
-          correctLevel: QRCode.CorrectLevel.H
-        });
-      });
-
-      peer.on('connection', incomingConn => {
-        conn = incomingConn;
-        statusText.textContent = `Status: Peer connected`;
-        setupReceiver();
-      });
-
-      peer.on('error', err => {
-        console.error(err);
-        statusText.textContent = `Status: Error - ${err.message}`;
-      });
-    }
-
-    connectBtn.addEventListener('click', () => {
-      if (!peer) {
-        alert('Generate your ID first.');
-        return;
-      }
-
-      const targetId = peerIdInput.value.trim();
-      if (!targetId) {
-        alert('Enter a valid Peer ID to connect.');
-        return;
-      }
-
-      conn = peer.connect(targetId);
-      conn.on('open', () => {
-        statusText.textContent = `Status: Connected to ${targetId}`;
-
-        //Enable send button only when ready
-        sendBtn.disabled = false;
-      });
-
-      conn.on('error', err => {
-        console.error(err);
-        statusText.textContent = `Status: Connection failed`;
-      });
-
+    peer.on('connection', incomingConn => {
+      conn = incomingConn;
+      statusText.textContent = `Status: Peer connected`;
+      sendBtn.disabled = false;
       setupReceiver();
+      monitorIceCandidates();
+      logFinalIceConnection();
     });
 
-    function setupReceiver() {
-      conn.on('data', (data) => {
-        if (data.type === 'file-meta') {
-          incomingFileInfo = data;
-          incomingFileData = [];
-          receivedSize = 0;
-          progressBar.value = 0;
-          statusText.textContent = `Receiving "${data.name}" (${Math.round(data.size / 1024)} KB)...`;
-        } else if (data.type === 'file-chunk') {
-          incomingFileData.push(new Uint8Array(data.chunk));
-          receivedSize += data.chunk.byteLength;
+    peer.on('error', err => {
+      console.error(err);
+      statusText.textContent = `❌ PeerJS Error: ${err.message}`;
+    });
+  }
 
-          const percent = Math.floor((receivedSize / incomingFileInfo.size) * 100);
-          progressBar.value = percent;
-
-          if (receivedSize >= incomingFileInfo.size) {
-            const blob = new Blob(incomingFileData);
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = incomingFileInfo.name;
-            link.click();
-            statusText.textContent = `Received file: ${incomingFileInfo.name}`;
-          }
-        }
-      });
+  connectBtn.addEventListener('click', () => {
+    if (!peer) {
+      alert('Generate your ID first.');
+      return;
     }
 
-    sendBtn.addEventListener('click', () => {
-      if (!conn || conn.open !== true) {
-        alert("No peer connected.");
+    const targetId = peerIdInput.value.trim();
+    if (!targetId) {
+      alert('Enter a valid Peer ID to connect.');
+      return;
+    }
+
+    conn = peer.connect(targetId);
+    conn.on('open', () => {
+      statusText.textContent = `Status: Connected to ${targetId}`;
+      sendBtn.disabled = false;
+      monitorIceCandidates();
+      logFinalIceConnection();
+    });
+
+    conn.on('error', err => {
+      console.error(err);
+      statusText.textContent = `❌ Connection failed`;
+    });
+
+    setupReceiver();
+  });
+
+  function setupReceiver() {
+    if (!conn) return;
+
+    conn.on('data', data => {
+      if (data.type === 'file-meta') {
+        incomingFileInfo = data;
+        incomingFileData = [];
+        receivedSize = 0;
+        progressBar.value = 0;
+        statusText.textContent = `Receiving "${data.name}" (${Math.round(data.size / 1024)} KB)...`;
+      } else if (data.type === 'file-chunk') {
+        incomingFileData.push(new Uint8Array(data.chunk));
+        receivedSize += data.chunk.byteLength;
+
+        const percent = Math.floor((receivedSize / incomingFileInfo.size) * 100);
+        progressBar.value = percent;
+
+        if (receivedSize >= incomingFileInfo.size) {
+          const blob = new Blob(incomingFileData);
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = incomingFileInfo.name;
+          link.click();
+          statusText.textContent = `✅ Received: ${incomingFileInfo.name}`;
+        }
+      }
+    });
+  }
+
+  sendBtn.addEventListener('click', () => {
+    if (!conn || !conn.open) {
+      alert("❌ No peer connected.");
+      return;
+    }
+
+    const files = Array.from(fileInput.files);
+    if (!files.length) {
+      alert("Please select at least one file.");
+      return;
+    }
+
+    function sendNext(index) {
+      if (index >= files.length) {
+        statusText.textContent = "✅ All files sent.";
         return;
       }
 
-      const file = fileInput.files[0];
-      if (!file) {
-        alert("Please select a file.");
-        return;
-      }
-
-      conn.send({
-        type: 'file-meta',
-        name: file.name,
-        size: file.size
-      });
+      const file = files[index];
+      conn.send({ type: 'file-meta', name: file.name, size: file.size });
 
       const reader = new FileReader();
       let offset = 0;
 
       reader.onload = function () {
         const chunk = reader.result;
-        conn.send({
-          type: 'file-chunk',
-          chunk: chunk
-        });
-
+        conn.send({ type: 'file-chunk', chunk });
         offset += chunk.byteLength;
+
         const percent = Math.floor((offset / file.size) * 100);
         progressBar.value = percent;
 
         if (offset < file.size) {
           readSlice(offset);
         } else {
-          statusText.textContent = `File "${file.name}" sent successfully.`;
+          statusText.textContent = `✅ Sent: ${file.name}`;
+          sendNext(index + 1); // Send next file
         }
       };
 
@@ -240,1100 +246,9 @@
       }
 
       readSlice(0);
-    });
-  </script>
-
-</body>
-</html> -->
-
-
-
-<!-- <!DOCTYPE html>
-<html>
-<head>
-  <title>Retro P2P File Transfer</title>
-  <meta charset="UTF-8">
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <style>
-    body {
-      background-color: #000;
-      color: #0f0;
-      font-family: monospace;
-      padding: 20px;
-    }
-    input, button, progress {
-      background-color: #000;
-      color: #0f0;
-      border: 1px solid #0f0;
-      padding: 5px;
-      margin: 5px 0;
-    }
-    button:hover {
-      background-color: #0f0;
-      color: #000;
-      cursor: pointer;
-    }
-    #qrcode {
-      margin-top: 10px;
-      border: 1px dashed #0f0;
-      padding: 10px;
-      width: fit-content;
-    }
-  </style>
-</head>
-<body>
-
-<h2>🕹️ Retro P2P File Transfer</h2>
-
-<div>
-  <label>Your Peer ID:</label><br>
-  <input type="text" id="myId" readonly />
-  <button id="generateIdBtn">Generate ID</button>
-</div>
-
-<div id="qrcode"></div>
-
-<br>
-
-<div>
-  <label>Connect to Peer ID:</label><br>
-  <input type="text" id="peerId" />
-  <button id="connectBtn">Connect</button>
-</div>
-
-<br>
-
-<div>
-  <input type="file" id="fileInput" />
-  <button id="sendBtn" disabled>Send File</button>
-</div>
-
-<br>
-
-<div>
-  <label>Progress:</label><br>
-  <progress id="progressBar" value="0" max="100" style="width:300px;"></progress>
-</div>
-
-<br>
-
-<div>
-  <p id="status">Status: Not connected</p>
-</div>
-
-<script>
-  let peer;
-  let conn;
-
-  const myIdInput = document.getElementById('myId');
-  const peerIdInput = document.getElementById('peerId');
-  const generateIdBtn = document.getElementById('generateIdBtn');
-  const connectBtn = document.getElementById('connectBtn');
-  const fileInput = document.getElementById('fileInput');
-  const sendBtn = document.getElementById('sendBtn');
-  const progressBar = document.getElementById('progressBar');
-  const statusText = document.getElementById('status');
-  const qrContainer = document.getElementById('qrcode');
-
-  const CHUNK_SIZE = 64 * 1024;
-  let incomingFileInfo = null;
-  let incomingFileData = [];
-  let receivedSize = 0;
-
-  generateIdBtn.addEventListener('click', () => {
-    if (peer) peer.destroy();
-
-    fetch('https://p2pftv1.onrender.com/ice')
-      .then(res => res.json())
-      .then(res => {
-        const config = { iceServers: res };
-        peer = new Peer({
-          host: 'p2pftv1.onrender.com',
-          port: 443,
-          path: '/peerjs',
-          secure: true,
-          config
-        });
-
-        setupPeerEvents();
-      })
-      .catch(err => {
-        console.error("❌ Failed to load ICE config:", err);
-        statusText.textContent = "❌ Failed to load ICE config.";
-      });
-  });
-
-  function setupPeerEvents() {
-    peer.on('open', id => {
-      myIdInput.value = id;
-      statusText.textContent = `Status: Your ID is ${id}`;
-      qrContainer.innerHTML = '';
-      new QRCode(qrContainer, {
-        text: id,
-        width: 180,
-        height: 180,
-        colorDark: "#0f0",
-        colorLight: "#000",
-        correctLevel: QRCode.CorrectLevel.H
-      });
-    });
-
-    peer.on('connection', incomingConn => {
-      conn = incomingConn;
-      statusText.textContent = `Status: Peer connected`;
-      sendBtn.disabled = false;
-      setupReceiver();
-    });
-
-    peer.on('error', err => {
-      console.error(err);
-      statusText.textContent = `❌ PeerJS Error: ${err.message}`;
-    });
-  }
-
-  connectBtn.addEventListener('click', () => {
-    if (!peer) {
-      alert('Generate your ID first.');
-      return;
     }
 
-    const targetId = peerIdInput.value.trim();
-    if (!targetId) {
-      alert('Enter a valid Peer ID to connect.');
-      return;
-    }
-
-    conn = peer.connect(targetId);
-    conn.on('open', () => {
-      statusText.textContent = `Status: Connected to ${targetId}`;
-      sendBtn.disabled = false;
-    });
-
-    conn.on('error', err => {
-      console.error(err);
-      statusText.textContent = `❌ Connection failed`;
-    });
-
-    setupReceiver();
-  });
-
-  function setupReceiver() {
-    if (!conn) return;
-
-    conn.on('data', data => {
-      if (data.type === 'file-meta') {
-        incomingFileInfo = data;
-        incomingFileData = [];
-        receivedSize = 0;
-        progressBar.value = 0;
-        statusText.textContent = `Receiving "${data.name}" (${Math.round(data.size / 1024)} KB)...`;
-      } else if (data.type === 'file-chunk') {
-        incomingFileData.push(new Uint8Array(data.chunk));
-        receivedSize += data.chunk.byteLength;
-
-        const percent = Math.floor((receivedSize / incomingFileInfo.size) * 100);
-        progressBar.value = percent;
-
-        if (receivedSize >= incomingFileInfo.size) {
-          const blob = new Blob(incomingFileData);
-          const link = document.createElement('a');
-          link.href = URL.createObjectURL(blob);
-          link.download = incomingFileInfo.name;
-          link.click();
-          statusText.textContent = `✅ Received: ${incomingFileInfo.name}`;
-        }
-      }
-    });
-  }
-
-  sendBtn.addEventListener('click', () => {
-    if (!conn || !conn.open) {
-      alert("❌ No peer connected.");
-      return;
-    }
-
-    const file = fileInput.files[0];
-    if (!file) {
-      alert("Please select a file.");
-      return;
-    }
-
-    conn.send({ type: 'file-meta', name: file.name, size: file.size });
-
-    const reader = new FileReader();
-    let offset = 0;
-
-    reader.onload = function () {
-      const chunk = reader.result;
-      conn.send({ type: 'file-chunk', chunk });
-      offset += chunk.byteLength;
-
-      const percent = Math.floor((offset / file.size) * 100);
-      progressBar.value = percent;
-
-      if (offset < file.size) {
-        readSlice(offset);
-      } else {
-        statusText.textContent = `✅ Sent: ${file.name}`;
-      }
-    };
-
-    function readSlice(o) {
-      const slice = file.slice(o, o + CHUNK_SIZE);
-      reader.readAsArrayBuffer(slice);
-    }
-
-    readSlice(0);
-  });
-</script>
-
-</body>
-</html>
- -->
-
-
-
-
-
-
-
-<!--  <!DOCTYPE html>
-<html>
-<head>
-  <title>Retro P2P File Transfer</title>
-  <meta charset="UTF-8">
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <style>
-    body {
-      background-color: #000;
-      color: #0f0;
-      font-family: monospace;
-      padding: 20px;
-    }
-    input, button, progress {
-      background-color: #000;
-      color: #0f0;
-      border: 1px solid #0f0;
-      padding: 5px;
-      margin: 5px 0;
-    }
-    button:hover {
-      background-color: #0f0;
-      color: #000;
-      cursor: pointer;
-    }
-    #qrcode {
-      margin-top: 10px;
-      border: 1px dashed #0f0;
-      padding: 10px;
-      width: fit-content;
-    }
-  </style>
-</head>
-<body>
-
-<h2>🕹️ Retro P2P File Transfer</h2>
-
-<div>
-  <label>Your Peer ID:</label><br>
-  <input type="text" id="myId" readonly />
-  <button id="generateIdBtn">Generate ID</button>
-</div>
-
-<div id="qrcode"></div>
-
-<br>
-
-<div>
-  <label>Connect to Peer ID:</label><br>
-  <input type="text" id="peerId" />
-  <button id="connectBtn">Connect</button>
-</div>
-
-<br>
-
-<div>
-  <input type="file" id="fileInput" />
-  <button id="sendBtn" disabled>Send File</button>
-</div>
-
-<br>
-
-<div>
-  <label>Progress:</label><br>
-  <progress id="progressBar" value="0" max="100" style="width:300px;"></progress>
-</div>
-
-<br>
-
-<div>
-  <p id="status">Status: Not connected</p>
-</div>
-
-<script>
-  let peer;
-  let conn;
-
-  const myIdInput = document.getElementById('myId');
-  const peerIdInput = document.getElementById('peerId');
-  const generateIdBtn = document.getElementById('generateIdBtn');
-  const connectBtn = document.getElementById('connectBtn');
-  const fileInput = document.getElementById('fileInput');
-  const sendBtn = document.getElementById('sendBtn');
-  const progressBar = document.getElementById('progressBar');
-  const statusText = document.getElementById('status');
-  const qrContainer = document.getElementById('qrcode');
-
-  const CHUNK_SIZE = 64 * 1024;
-  let incomingFileInfo = null;
-  let incomingFileData = [];
-  let receivedSize = 0;
-
-  generateIdBtn.addEventListener('click', () => {
-    if (peer) peer.destroy();
-
-    fetch('https://p2pftv1.onrender.com/ice')
-      .then(res => res.json())
-      .then(res => {
-        const config = { iceServers: res };
-        peer = new Peer({
-          host: 'p2pftv1.onrender.com',
-          port: 443,
-          path: '/peerjs',
-          secure: true,
-          config
-        });
-
-
-        setupPeerEvents();
-      })
-      .catch(err => {
-        console.error("❌ Failed to load ICE config:", err);
-        statusText.textContent = "❌ Failed to load ICE config.";
-      });
-  });
-
-  function setupPeerEvents() {
-    peer.on('open', id => {
-      myIdInput.value = id;
-      statusText.textContent = `Status: Your ID is ${id}`;
-      qrContainer.innerHTML = '';
-      new QRCode(qrContainer, {
-        text: id,
-        width: 180,
-        height: 180,
-        colorDark: "#0f0",
-        colorLight: "#000",
-        correctLevel: QRCode.CorrectLevel.H
-      });
-    });
-
-    peer.on('connection', incomingConn => {
-      conn = incomingConn;
-      statusText.textContent = `Status: Peer connected`;
-      sendBtn.disabled = false;
-      setupReceiver();
-      logIceConnectionType(); // ✅ Log ICE connection method
-    });
-
-    peer.on('error', err => {
-      console.error(err);
-      statusText.textContent = `❌ PeerJS Error: ${err.message}`;
-    });
-  }
-
-  connectBtn.addEventListener('click', () => {
-    if (!peer) {
-      alert('Generate your ID first.');
-      return;
-    }
-
-    const targetId = peerIdInput.value.trim();
-    if (!targetId) {
-      alert('Enter a valid Peer ID to connect.');
-      return;
-    }
-
-    conn = peer.connect(targetId);
-    conn.on('open', () => {
-      statusText.textContent = `Status: Connected to ${targetId}`;
-      sendBtn.disabled = false;
-      logIceConnectionType(); // ✅ Log ICE connection method
-    });
-
-    conn.on('error', err => {
-      console.error(err);
-      statusText.textContent = `❌ Connection failed`;
-    });
-
-    setupReceiver();
-  });
-
-  function setupReceiver() {
-    if (!conn) return;
-
-    conn.on('data', data => {
-      if (data.type === 'file-meta') {
-        incomingFileInfo = data;
-        incomingFileData = [];
-        receivedSize = 0;
-        progressBar.value = 0;
-        statusText.textContent = `Receiving "${data.name}" (${Math.round(data.size / 1024)} KB)...`;
-      } else if (data.type === 'file-chunk') {
-        incomingFileData.push(new Uint8Array(data.chunk));
-        receivedSize += data.chunk.byteLength;
-
-        const percent = Math.floor((receivedSize / incomingFileInfo.size) * 100);
-        progressBar.value = percent;
-
-        if (receivedSize >= incomingFileInfo.size) {
-          const blob = new Blob(incomingFileData);
-          const link = document.createElement('a');
-          link.href = URL.createObjectURL(blob);
-          link.download = incomingFileInfo.name;
-          link.click();
-          statusText.textContent = `✅ Received: ${incomingFileInfo.name}`;
-        }
-      }
-    });
-  }
-
-  sendBtn.addEventListener('click', () => {
-    if (!conn || !conn.open) {
-      alert("❌ No peer connected.");
-      return;
-    }
-
-    const file = fileInput.files[0];
-    if (!file) {
-      alert("Please select a file.");
-      return;
-    }
-
-    conn.send({ type: 'file-meta', name: file.name, size: file.size });
-
-    const reader = new FileReader();
-    let offset = 0;
-
-    reader.onload = function () {
-      const chunk = reader.result;
-      conn.send({ type: 'file-chunk', chunk });
-      offset += chunk.byteLength;
-
-      const percent = Math.floor((offset / file.size) * 100);
-      progressBar.value = percent;
-
-      if (offset < file.size) {
-        readSlice(offset);
-      } else {
-        statusText.textContent = `✅ Sent: ${file.name}`;
-      }
-    };
-
-    function readSlice(o) {
-      const slice = file.slice(o, o + CHUNK_SIZE);
-      reader.readAsArrayBuffer(slice);
-    }
-
-    readSlice(0);
-  });
-
-  // ✅ ICE Debug Logging Function
-  function logIceConnectionType() {
-    setTimeout(() => {
-      const peerConnection =
-        conn.peerConnection ||
-        conn._pc ||
-        (peer.connections && peer.connections[conn.peer]?.[0]?.peerConnection);
-
-      if (!peerConnection) {
-        console.warn("⚠️ Could not access underlying WebRTC connection.");
-        return;
-      }
-
-      peerConnection.addEventListener('icecandidate', event => {
-        if (event.candidate) {
-          const type = event.candidate.type;
-          if (type === 'host') {
-            console.log("✅ Direct connection established (LAN or same network).");
-          } else if (type === 'srflx') {
-            console.log("🌐 STUN server used (connection via public IP).");
-          } else if (type === 'relay') {
-            console.log("🔁 TURN relay used — likely due to VPN, firewall, or strict NAT.");
-          } else {
-            console.log(`ℹ️ ICE Candidate type: ${type}`);
-          }
-        }
-      });
-
-      peerConnection.addEventListener('iceconnectionstatechange', () => {
-        console.log(`🔄 ICE state changed to: ${peerConnection.iceConnectionState}`);
-      });
-
-      peerConnection.addEventListener('connectionstatechange', () => {
-        console.log(`🔌 WebRTC connection state: ${peerConnection.connectionState}`);
-      });
-    }, 500);
-  }
-</script>
-
-</body>
-</html> -->
-
-
-
-
-
-
-
-<!-- <!DOCTYPE html>
-<html>
-<head>
-  <title>Retro P2P File Transfer</title>
-  <meta charset="UTF-8">
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <style>
-    body {
-      background-color: #000;
-      color: #0f0;
-      font-family: monospace;
-      padding: 20px;
-    }
-    input, button, progress {
-      background-color: #000;
-      color: #0f0;
-      border: 1px solid #0f0;
-      padding: 5px;
-      margin: 5px 0;
-    }
-    button:hover {
-      background-color: #0f0;
-      color: #000;
-      cursor: pointer;
-    }
-    #qrcode {
-      margin-top: 10px;
-      border: 1px dashed #0f0;
-      padding: 10px;
-      width: fit-content;
-    }
-  </style>
-</head>
-<body>
-
-<h2>🕹️ Retro P2P File Transfer</h2>
-
-<div>
-  <label>Your Peer ID:</label><br>
-  <input type="text" id="myId" readonly />
-  <button id="generateIdBtn">Generate ID</button>
-</div>
-
-<div id="qrcode"></div>
-
-<br>
-
-<div>
-  <label>Connect to Peer ID:</label><br>
-  <input type="text" id="peerId" />
-  <button id="connectBtn">Connect</button>
-</div>
-
-<br>
-
-<div>
-  <input type="file" id="fileInput" />
-  <button id="sendBtn" disabled>Send File</button>
-</div>
-
-<br>
-
-<div>
-  <label>Progress:</label><br>
-  <progress id="progressBar" value="0" max="100" style="width:300px;"></progress>
-</div>
-
-<br>
-
-<div>
-  <p id="status">Status: Not connected</p>
-</div>
-
-<script>
-  let peer;
-  let conn;
-
-  const myIdInput = document.getElementById('myId');
-  const peerIdInput = document.getElementById('peerId');
-  const generateIdBtn = document.getElementById('generateIdBtn');
-  const connectBtn = document.getElementById('connectBtn');
-  const fileInput = document.getElementById('fileInput');
-  const sendBtn = document.getElementById('sendBtn');
-  const progressBar = document.getElementById('progressBar');
-  const statusText = document.getElementById('status');
-  const qrContainer = document.getElementById('qrcode');
-
-  const CHUNK_SIZE = 64 * 1024;
-  let incomingFileInfo = null;
-  let incomingFileData = [];
-  let receivedSize = 0;
-
-  generateIdBtn.addEventListener('click', () => {
-    if (peer) peer.destroy();
-
-    fetch('https://p2pftv1.onrender.com/ice')
-      .then(res => res.json())
-      .then(res => {
-        const config = { iceServers: res };
-        peer = new Peer({
-          host: 'p2pftv1.onrender.com',
-          port: 443,
-          path: '/peerjs',
-          secure: true,
-          config
-        });
-        setupPeerEvents();
-      })
-      .catch(err => {
-        console.error("❌ Failed to load ICE config:", err);
-        statusText.textContent = "❌ Failed to load ICE config.";
-      });
-  });
-
-  function setupPeerEvents() {
-    peer.on('open', id => {
-      myIdInput.value = id;
-      statusText.textContent = `Status: Your ID is ${id}`;
-      qrContainer.innerHTML = '';
-      new QRCode(qrContainer, {
-        text: id,
-        width: 180,
-        height: 180,
-        colorDark: "#0f0",
-        colorLight: "#000",
-        correctLevel: QRCode.CorrectLevel.H
-      });
-    });
-
-    peer.on('connection', incomingConn => {
-      conn = incomingConn;
-      statusText.textContent = `Status: Peer connected`;
-      sendBtn.disabled = false;
-      setupReceiver();
-      logIceConnectionType(); // ✅ Updated
-    });
-
-    peer.on('error', err => {
-      console.error(err);
-      statusText.textContent = `❌ PeerJS Error: ${err.message}`;
-    });
-  }
-
-  connectBtn.addEventListener('click', () => {
-    if (!peer) {
-      alert('Generate your ID first.');
-      return;
-    }
-
-    const targetId = peerIdInput.value.trim();
-    if (!targetId) {
-      alert('Enter a valid Peer ID to connect.');
-      return;
-    }
-
-    conn = peer.connect(targetId);
-    conn.on('open', () => {
-      statusText.textContent = `Status: Connected to ${targetId}`;
-      sendBtn.disabled = false;
-      logIceConnectionType(); // ✅ Updated
-    });
-
-    conn.on('error', err => {
-      console.error(err);
-      statusText.textContent = `❌ Connection failed`;
-    });
-
-    setupReceiver();
-  });
-
-  function setupReceiver() {
-    if (!conn) return;
-
-    conn.on('data', data => {
-      if (data.type === 'file-meta') {
-        incomingFileInfo = data;
-        incomingFileData = [];
-        receivedSize = 0;
-        progressBar.value = 0;
-        statusText.textContent = `Receiving "${data.name}" (${Math.round(data.size / 1024)} KB)...`;
-      } else if (data.type === 'file-chunk') {
-        incomingFileData.push(new Uint8Array(data.chunk));
-        receivedSize += data.chunk.byteLength;
-
-        const percent = Math.floor((receivedSize / incomingFileInfo.size) * 100);
-        progressBar.value = percent;
-
-        if (receivedSize >= incomingFileInfo.size) {
-          const blob = new Blob(incomingFileData);
-          const link = document.createElement('a');
-          link.href = URL.createObjectURL(blob);
-          link.download = incomingFileInfo.name;
-          link.click();
-          statusText.textContent = `✅ Received: ${incomingFileInfo.name}`;
-        }
-      }
-    });
-  }
-
-  sendBtn.addEventListener('click', () => {
-    if (!conn || !conn.open) {
-      alert("❌ No peer connected.");
-      return;
-    }
-
-    const file = fileInput.files[0];
-    if (!file) {
-      alert("Please select a file.");
-      return;
-    }
-
-    conn.send({ type: 'file-meta', name: file.name, size: file.size });
-
-    const reader = new FileReader();
-    let offset = 0;
-
-    reader.onload = function () {
-      const chunk = reader.result;
-      conn.send({ type: 'file-chunk', chunk });
-      offset += chunk.byteLength;
-
-      const percent = Math.floor((offset / file.size) * 100);
-      progressBar.value = percent;
-
-      if (offset < file.size) {
-        readSlice(offset);
-      } else {
-        statusText.textContent = `✅ Sent: ${file.name}`;
-      }
-    };
-
-    function readSlice(o) {
-      const slice = file.slice(o, o + CHUNK_SIZE);
-      reader.readAsArrayBuffer(slice);
-    }
-
-    readSlice(0);
-  });
-
-  // ✅ Enhanced ICE connection logger
-  function logIceConnectionType() {
-    setTimeout(async () => {
-      const pc =
-        conn?.peerConnection ||
-        conn?._pc ||
-        (peer.connections?.[conn.peer]?.[0]?.peerConnection);
-
-      if (!pc) {
-        console.warn("⚠️ Could not access WebRTC connection.");
-        return;
-      }
-
-      try {
-        const stats = await pc.getStats();
-        let selectedPair;
-        stats.forEach(report => {
-          if (report.type === 'transport' && report.selectedCandidatePairId) {
-            selectedPair = stats.get(report.selectedCandidatePairId);
-          }
-        });
-
-        if (!selectedPair) {
-          stats.forEach(report => {
-            if (report.type === 'candidate-pair' && report.selected) {
-              selectedPair = report;
-            }
-          });
-        }
-
-        if (selectedPair) {
-          const local = stats.get(selectedPair.localCandidateId);
-          const remote = stats.get(selectedPair.remoteCandidateId);
-
-          if (local && remote) {
-            console.log(`🔍 Final connection used:`);
-            console.log(`   ✅ Local: ${local.candidateType}`);
-            console.log(`   🌍 Remote: ${remote.candidateType}`);
-
-            const summary = {
-              'host': "✅ Direct (host) — same LAN",
-              'srflx': "🌐 STUN (srflx) — public IP",
-              'relay': "🔁 TURN (relay) — relayed"
-            };
-            console.log("🔎 Summary:", summary[local.candidateType] || "Unknown");
-          } else {
-            console.log("⚠️ Candidate details not found.");
-          }
-        } else {
-          console.log("⚠️ No selected ICE candidate pair.");
-        }
-      } catch (err) {
-        console.error("❌ getStats() failed:", err);
-      }
-    }, 3000); // Wait for ICE to settle
-  }
-</script>
-
-</body>
-</html>
- -->
-
-
-
-
-
- <!DOCTYPE html>
-<html>
-<head>
-  <title>Retro P2P File Transfer</title>
-  <meta charset="UTF-8">
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <style>
-    body {
-      background-color: #000;
-      color: #0f0;
-      font-family: monospace;
-      padding: 20px;
-    }
-    input, button, progress {
-      background-color: #000;
-      color: #0f0;
-      border: 1px solid #0f0;
-      padding: 5px;
-      margin: 5px 0;
-    }
-    button:hover {
-      background-color: #0f0;
-      color: #000;
-      cursor: pointer;
-    }
-    #qrcode {
-      margin-top: 10px;
-      border: 1px dashed #0f0;
-      padding: 10px;
-      width: fit-content;
-    }
-  </style>
-</head>
-<body>
-
-<h2>🕹️ Retro P2P File Transfer</h2>
-
-<div>
-  <label>Your Peer ID:</label><br>
-  <input type="text" id="myId" readonly />
-  <button id="generateIdBtn">Generate ID</button>
-</div>
-
-<div id="qrcode"></div>
-
-<br>
-
-<div>
-  <label>Connect to Peer ID:</label><br>
-  <input type="text" id="peerId" />
-  <button id="connectBtn">Connect</button>
-</div>
-
-<br>
-
-<div>
-  <input type="file" id="fileInput" />
-  <button id="sendBtn" disabled>Send File</button>
-</div>
-
-<br>
-
-<div>
-  <label>Progress:</label><br>
-  <progress id="progressBar" value="0" max="100" style="width:300px;"></progress>
-</div>
-
-<br>
-
-<div>
-  <p id="status">Status: Not connected</p>
-</div>
-
-<script>
-  let peer;
-  let conn;
-
-  const myIdInput = document.getElementById('myId');
-  const peerIdInput = document.getElementById('peerId');
-  const generateIdBtn = document.getElementById('generateIdBtn');
-  const connectBtn = document.getElementById('connectBtn');
-  const fileInput = document.getElementById('fileInput');
-  const sendBtn = document.getElementById('sendBtn');
-  const progressBar = document.getElementById('progressBar');
-  const statusText = document.getElementById('status');
-  const qrContainer = document.getElementById('qrcode');
-
-  const CHUNK_SIZE = 64 * 1024;
-  let incomingFileInfo = null;
-  let incomingFileData = [];
-  let receivedSize = 0;
-
-  generateIdBtn.addEventListener('click', () => {
-    if (peer) peer.destroy();
-
-    fetch('https://p2pftv1.onrender.com/ice')
-      .then(res => res.json())
-      .then(res => {
-        const config = { iceServers: res };
-        peer = new Peer({
-          host: 'p2pftv1.onrender.com',
-          port: 443,
-          path: '/peerjs',
-          secure: true,
-          config
-        });
-        setupPeerEvents();
-      })
-      .catch(err => {
-        console.error("❌ Failed to load ICE config:", err);
-        statusText.textContent = "❌ Failed to load ICE config.";
-      });
-  });
-
-  function setupPeerEvents() {
-    peer.on('open', id => {
-      myIdInput.value = id;
-      statusText.textContent = `Status: Your ID is ${id}`;
-      qrContainer.innerHTML = '';
-      new QRCode(qrContainer, {
-        text: id,
-        width: 180,
-        height: 180,
-        colorDark: "#0f0",
-        colorLight: "#000",
-        correctLevel: QRCode.CorrectLevel.H
-      });
-    });
-
-    peer.on('connection', incomingConn => {
-      conn = incomingConn;
-      statusText.textContent = `Status: Peer connected`;
-      sendBtn.disabled = false;
-      setupReceiver();
-      monitorIceCandidates();     // 👈 Real-time ICE logging
-      logFinalIceConnection();   // 👈 Final selected path
-    });
-
-    peer.on('error', err => {
-      console.error(err);
-      statusText.textContent = `❌ PeerJS Error: ${err.message}`;
-    });
-  }
-
-  connectBtn.addEventListener('click', () => {
-    if (!peer) {
-      alert('Generate your ID first.');
-      return;
-    }
-
-    const targetId = peerIdInput.value.trim();
-    if (!targetId) {
-      alert('Enter a valid Peer ID to connect.');
-      return;
-    }
-
-    conn = peer.connect(targetId);
-    conn.on('open', () => {
-      statusText.textContent = `Status: Connected to ${targetId}`;
-      sendBtn.disabled = false;
-      monitorIceCandidates();     // 👈 Real-time ICE logging
-      logFinalIceConnection();   // 👈 Final selected path
-    });
-
-    conn.on('error', err => {
-      console.error(err);
-      statusText.textContent = `❌ Connection failed`;
-    });
-
-    setupReceiver();
-  });
-
-  function setupReceiver() {
-    if (!conn) return;
-
-    conn.on('data', data => {
-      if (data.type === 'file-meta') {
-        incomingFileInfo = data;
-        incomingFileData = [];
-        receivedSize = 0;
-        progressBar.value = 0;
-        statusText.textContent = `Receiving "${data.name}" (${Math.round(data.size / 1024)} KB)...`;
-      } else if (data.type === 'file-chunk') {
-        incomingFileData.push(new Uint8Array(data.chunk));
-        receivedSize += data.chunk.byteLength;
-
-        const percent = Math.floor((receivedSize / incomingFileInfo.size) * 100);
-        progressBar.value = percent;
-
-        if (receivedSize >= incomingFileInfo.size) {
-          const blob = new Blob(incomingFileData);
-          const link = document.createElement('a');
-          link.href = URL.createObjectURL(blob);
-          link.download = incomingFileInfo.name;
-          link.click();
-          statusText.textContent = `✅ Received: ${incomingFileInfo.name}`;
-        }
-      }
-    });
-  }
-
-  sendBtn.addEventListener('click', () => {
-    if (!conn || !conn.open) {
-      alert("❌ No peer connected.");
-      return;
-    }
-
-    const file = fileInput.files[0];
-    if (!file) {
-      alert("Please select a file.");
-      return;
-    }
-
-    conn.send({ type: 'file-meta', name: file.name, size: file.size });
-
-    const reader = new FileReader();
-    let offset = 0;
-
-    reader.onload = function () {
-      const chunk = reader.result;
-      conn.send({ type: 'file-chunk', chunk });
-      offset += chunk.byteLength;
-
-      const percent = Math.floor((offset / file.size) * 100);
-      progressBar.value = percent;
-
-      if (offset < file.size) {
-        readSlice(offset);
-      } else {
-        statusText.textContent = `✅ Sent: ${file.name}`;
-      }
-    };
-
-    function readSlice(o) {
-      const slice = file.slice(o, o + CHUNK_SIZE);
-      reader.readAsArrayBuffer(slice);
-    }
-
-    readSlice(0);
+    sendNext(0);
   });
 
   function monitorIceCandidates() {
@@ -1411,7 +326,7 @@
       } catch (err) {
         console.error("❌ getStats() failed:", err);
       }
-    }, 3000); // Let ICE settle
+    }, 3000);
   }
 </script>
 
