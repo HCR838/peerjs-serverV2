@@ -1172,7 +1172,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title> Test 2 Retro P2P File Transfer</title>
+  <title> Test 1 Retro P2P File Transfer</title>
   <meta charset="UTF-8">
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
@@ -1410,11 +1410,7 @@
       if (offset < file.size) {
         readSlice(offset);
       } else {
-        const modeUsed = useRawMode ? "🚀 RAW mode" : "🛡️ Structured mode";
-        statusText.textContent = `✅ Sent: ${file.name} (${modeUsed})`;
-        console.log(`📤 File sent using ${modeUsed} (size: ${Math.round(file.size / 1024)} KB)`);
- 
-        // statusText.textContent = `✅ Sent: ${file.name} (${useRawMode ? "raw" : "structured"} mode)`;
+        statusText.textContent = `✅ Sent: ${file.name} (${useRawMode ? "raw" : "structured"} mode)`;
       }
     };
 
